@@ -88,6 +88,7 @@ with tab1:
     col_in1, col_in2 = st.columns(2)
 
     with col_in1:
+        st.markdown("##### ⚙️ Parameter Perencanaan & Tanah")
         umur_rencana = st.number_input(
             "Umur Rencana (tahun)",
             min_value=1, max_value=40, value=20, step=1,
@@ -98,18 +99,48 @@ with tab1:
             min_value=0.0, max_value=15.0, value=5.0, step=0.5,
             help="Laju pertumbuhan lalu lintas rata-rata per tahun.",
         )
-
-    with col_in2:
-        lhr = st.number_input(
-            "LHR Kendaraan Berat – Sumbu Standar (ESA/hari)",
-            min_value=1, max_value=100000, value=500, step=50,
-            help="Lintas Harian Rata-rata kendaraan berat dalam ekivalen sumbu standar.",
-        )
         cbr = st.number_input(
             "Nilai CBR Tanah Dasar (%)",
             min_value=1.0, max_value=30.0, value=6.0, step=0.5,
             help="Nilai CBR (California Bearing Ratio) tanah dasar.",
         )
+
+        # Faktor Distribusi Lajur (DL)
+        tipe_jalan_dict = {
+            "1 Lajur (DL = 1.0)": 1.0,
+            "2 Lajur 2 Arah (DL = 0.5)": 0.5,
+            "4 Lajur 2 Arah (DL = 0.45)": 0.45,
+        }
+        pilihan_jalan = st.selectbox(
+            "Tipe Jalan & Faktor Distribusi Lajur (DL)",
+            options=list(tipe_jalan_dict.keys()),
+            index=1,
+            help="Faktor distribusi lajur (DL) menentukan proporsi beban kendaraan berat pada lajur rencana.",
+        )
+        dl = tipe_jalan_dict[pilihan_jalan]
+
+    with col_in2:
+        st.markdown("##### 🚛 Breakdown Volume Lalu Lintas (LHR) & VDF")
+        lhr_bus = st.number_input(
+            "LHR Bus (VDF = 1.2)",
+            min_value=0, max_value=100000, value=150, step=10,
+            help="Volume bus per hari dengan Vehicle Damage Factor (VDF) 1.2",
+        )
+        lhr_truk2 = st.number_input(
+            "LHR Truk 2 Sumbu / Engkel (VDF = 9.2)",
+            min_value=0, max_value=100000, value=250, step=10,
+            help="Volume truk 2 sumbu per hari dengan Vehicle Damage Factor (VDF) 9.2",
+        )
+        lhr_truk3 = st.number_input(
+            "LHR Truk 3 Sumbu / Tronton (VDF = 20.0)",
+            min_value=0, max_value=100000, value=100, step=10,
+            help="Volume truk 3 sumbu / tronton per hari dengan Vehicle Damage Factor (VDF) 20.0",
+        )
+
+        # Hitung Lintas Ekivalen (LE) Harian
+        # LE = (LHR Bus * 1.2) + (LHR Truk 2 * 9.2) + (LHR Truk 3 * 20.0)
+        le_harian = (lhr_bus * 1.2) + (lhr_truk2 * 9.2) + (lhr_truk3 * 20.0)
+        st.info(f"📊 **Lintas Ekivalen (LE) Harian:** {le_harian:,.1f} ESA/hari")
 
     st.divider()
 
@@ -130,10 +161,10 @@ with tab1:
 
     # 2) Kumulatif Beban Lalu Lintas (CESAL)
     # -------------------------------------------------------
-    # Rumus:  CESAL = LHR × 365 × R
+    # Rumus:  CESAL = LE × 365 × R × DL
     # Satuan awal: ESA (Equivalent Standard Axle)
     # Konversi ke Juta ESA: CESAL / 1.000.000
-    cesal_total = lhr * 365 * R                     # total ESA selama umur rencana
+    cesal_total = le_harian * 365 * R * dl          # total ESA selama umur rencana
     cesal_juta  = cesal_total / 1_000_000           # konversi ke Juta ESA (MESA)
 
     # 3) Daya Dukung Tanah (DDT)
@@ -145,10 +176,11 @@ with tab1:
     # ── Tampilkan Metrik Hasil ───────────────────────────────────────
     st.markdown("### 📊 Hasil Perhitungan")
 
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Faktor Pertumbuhan (R)", f"{R:,.2f}")
-    m2.metric("CESAL (Juta ESA)", f"{cesal_juta:,.3f}")
-    m3.metric("Daya Dukung Tanah (DDT)", f"{ddt:,.2f}")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("LE Harian", f"{le_harian:,.1f} ESA/hari")
+    m2.metric("Faktor Pertumbuhan (R)", f"{R:,.2f}")
+    m3.metric("CESAL (Juta ESA)", f"{cesal_juta:,.3f}")
+    m4.metric("Daya Dukung Tanah (DDT)", f"{ddt:,.2f}")
 
     st.divider()
 
@@ -235,9 +267,11 @@ with tab1:
 
     k1, k2 = st.columns(2)
     k1.info(f"**Kelas Lalu Lintas:** {rekom['Kelas Lalu Lintas']}  \n"
-            f"**CESAL:** {cesal_juta:,.3f} Juta ESA")
+            f"**CESAL:** {cesal_juta:,.3f} Juta ESA  \n"
+            f"**DL:** {dl} ({pilihan_jalan})")
     k2.info(f"**Kelas Tanah Dasar:** {rekom['Kelas Tanah Dasar']}  \n"
-            f"**CBR:** {cbr:.1f}%  |  **DDT:** {ddt:.2f}")
+            f"**CBR:** {cbr:.1f}%  |  **DDT:** {ddt:.2f}  \n"
+            f"**LE Harian:** {le_harian:,.1f} ESA/hari")
 
     df_rekom = pd.DataFrame([
         {"Lapisan": "Lapis Permukaan (AC / HRS)",
@@ -253,55 +287,94 @@ with tab1:
     st.dataframe(df_rekom, use_container_width=True, hide_index=True)
 
     # ── Visualisasi Penampang Vertikal Perkerasan (Plotly) ──────────
-    # Menggunakan stacked bar chart vertikal untuk menggambarkan
-    # susunan lapisan perkerasan secara proporsional (vertikal).
-    # Urutan penumpukan (bawah → atas):
-    #   1. Lapis Pondasi Bawah (Sub-Base) – warna cokelat muda
-    #   2. Lapis Pondasi Atas (Base)       – warna abu-abu muda
-    #   3. Lapis Permukaan (AC)            – warna hitam/abu-abu gelap
+    # Menggunakan stacked bar chart vertikal dari atas ke bawah
+    # (autorange="reversed" pada yaxis) yang terdiri dari 4 lapisan:
+    #   1. Lapis Permukaan / AC (#2b2b2b)
+    #   2. Lapis Pondasi Atas / Agregat A (#8c8c8c)
+    #   3. Lapis Pondasi Bawah / Agregat B (#d9b38c)
+    #   4. Tanah Dasar / Subgrade (#5c4033) dengan info CBR (%)
     # ─────────────────────────────────────────────────────────────────
 
-    st.markdown("### 📐 Penampang Vertikal Perkerasan")
+    st.markdown("### 📐 Penampang Melintang Perkerasan (Potongan Vertikal)")
 
     t_permukaan = rekom["Lapis Permukaan (AC) [cm]"]
     t_base      = rekom["Lapis Pondasi Atas (Base) [cm]"]
     t_subbase   = rekom["Lapis Pondasi Bawah (Sub-Base) [cm]"]
+    t_subgrade  = 20  # tebal representasi visual untuk tanah dasar (infinite)
+
+    # Titik kedalaman kumulatif untuk tanda pada sumbu Y
+    d1 = t_permukaan
+    d2 = d1 + t_base
+    d3 = d2 + t_subbase
 
     fig_section = go.Figure()
 
-    # Lapisan ditambahkan dari bawah ke atas (stack order)
+    # Lapisan 1: Lapis Permukaan / AC (#2b2b2b)
     fig_section.add_trace(go.Bar(
-        x=["Perkerasan"], y=[t_subbase],
-        name=f"Pondasi Bawah ({t_subbase} cm)",
-        marker_color="#c9a96e",                      # cokelat muda
-        text=[f"{t_subbase} cm"], textposition="inside",
-        textfont=dict(size=13, color="white"),
-    ))
-    fig_section.add_trace(go.Bar(
-        x=["Perkerasan"], y=[t_base],
-        name=f"Pondasi Atas ({t_base} cm)",
-        marker_color="#b0b0b0",                      # abu-abu muda
-        text=[f"{t_base} cm"], textposition="inside",
-        textfont=dict(size=13, color="white"),
-    ))
-    fig_section.add_trace(go.Bar(
-        x=["Perkerasan"], y=[t_permukaan],
+        x=["Perkerasan"],
+        y=[t_permukaan],
         name=f"Lapis Permukaan ({t_permukaan} cm)",
-        marker_color="#2d2d2d",                      # hitam/abu-abu gelap
-        text=[f"{t_permukaan} cm"], textposition="inside",
+        marker_color="#2b2b2b",
+        text=[f"LAPIS PERMUKAAN (AC) — {t_permukaan} cm"],
+        textposition="inside",
+        textfont=dict(size=13, color="white"),
+    ))
+
+    # Lapisan 2: Lapis Pondasi Atas / Agregat A (#8c8c8c)
+    fig_section.add_trace(go.Bar(
+        x=["Perkerasan"],
+        y=[t_base],
+        name=f"Pondasi Atas ({t_base} cm)",
+        marker_color="#8c8c8c",
+        text=[f"LAPIS PONDASI ATAS (AGREGAT KELAS A) — {t_base} cm"],
+        textposition="inside",
+        textfont=dict(size=13, color="white"),
+    ))
+
+    # Lapisan 3: Lapis Pondasi Bawah / Agregat B (#d9b38c)
+    fig_section.add_trace(go.Bar(
+        x=["Perkerasan"],
+        y=[t_subbase],
+        name=f"Pondasi Bawah ({t_subbase} cm)",
+        marker_color="#d9b38c",
+        text=[f"LAPIS PONDASI BAWAH (AGREGAT KELAS B) — {t_subbase} cm"],
+        textposition="inside",
+        textfont=dict(size=13, color="#1e1e1e"),
+    ))
+
+    # Lapisan 4: Tanah Dasar / Subgrade (#5c4033)
+    fig_section.add_trace(go.Bar(
+        x=["Perkerasan"],
+        y=[t_subgrade],
+        name=f"Tanah Dasar (CBR {cbr:.1f}%)",
+        marker_color="#5c4033",
+        text=[f"TANAH DASAR (SUBGRADE) — CBR {cbr:.1f}% (Infinite)"],
+        textposition="inside",
         textfont=dict(size=13, color="white"),
     ))
 
     fig_section.update_layout(
         barmode="stack",
-        title=dict(text="Susunan Lapisan Perkerasan (cm)", font=dict(size=16)),
-        yaxis_title="Tebal (cm)",
+        title=dict(
+            text="Susunan Lapisan Perkerasan (Potongan Vertikal)",
+            font=dict(size=16)
+        ),
+        yaxis=dict(
+            autorange="reversed",
+            title="Kedalaman (cm)",
+            tickvals=[0, d1, d2, d3],
+            ticktext=["0 cm", f"{d1} cm", f"{d2} cm", f"{d3} cm"],
+            showgrid=True,
+        ),
         xaxis=dict(showticklabels=False),
-        height=250,
-        margin=dict(l=20, r=20, t=50, b=40),
+        height=450,
+        margin=dict(l=50, r=30, t=50, b=40),
         legend=dict(
-            orientation="h", yanchor="bottom", y=-0.45,
-            xanchor="center", x=0.5,
+            orientation="h",
+            yanchor="bottom",
+            y=-0.25,
+            xanchor="center",
+            x=0.5,
         ),
     )
 
@@ -314,17 +387,26 @@ with tab1:
 |---|---|
 | Umur Rencana (n) | **{umur_rencana}** tahun |
 | Laju Pertumbuhan (i) | **{laju_pertumbuhan}%** |
-| LHR Kendaraan Berat | **{lhr:,}** ESA/hari |
 | CBR Tanah Dasar | **{cbr:.1f}%** |
+| Faktor Distribusi Lajur (DL) | **{dl}** ({pilihan_jalan}) |
+| LHR Bus (VDF = 1.2) | **{lhr_bus:,}** kendaraan/hari |
+| LHR Truk 2 Sumbu (VDF = 9.2) | **{lhr_truk2:,}** kendaraan/hari |
+| LHR Truk 3 Sumbu (VDF = 20.0) | **{lhr_truk3:,}** kendaraan/hari |
+| **Lintas Ekivalen (LE) Harian** | **{le_harian:,.1f}** ESA/hari |
 
 **Rumus yang digunakan:**
-1. **Faktor Pertumbuhan Majemuk (R):**
+1. **Lintas Ekivalen (LE) Harian:**
+   `LE = (LHR_Bus × 1.2) + (LHR_Truk2 × 9.2) + (LHR_Truk3 × 20.0)`
+   `LE = ({lhr_bus:,} × 1.2) + ({lhr_truk2:,} × 9.2) + ({lhr_truk3:,} × 20.0) = {le_harian:,.1f} ESA/hari`
+
+2. **Faktor Pertumbuhan Majemuk (R):**
    `R = [(1 + i)^n − 1] / i = [(1 + {i})^{umur_rencana} − 1] / {i} = {R:,.2f}`
 
-2. **CESAL (Cumulative Equivalent Standard Axle Load):**
-   `CESAL = LHR × 365 × R = {lhr:,} × 365 × {R:,.2f} = {cesal_total:,.0f} ESA = {cesal_juta:,.3f} Juta ESA`
+3. **CESAL (Cumulative Equivalent Standard Axle Load):**
+   `CESAL = LE × 365 × R × DL / 1.000.000`
+   `CESAL = {le_harian:,.1f} × 365 × {R:,.2f} × {dl} / 1.000.000 = {cesal_juta:,.3f} Juta ESA`
 
-3. **DDT (Daya Dukung Tanah):**
+4. **DDT (Daya Dukung Tanah):**
    `DDT = 4.3 × log₁₀(CBR) + 1.7 = 4.3 × log₁₀({cbr}) + 1.7 = {ddt:.2f}`
         """)
 
